@@ -40,13 +40,14 @@ Inspired by CleanMyMac — personal project, macOS 12+.
 - [x] TypeScript: zero type errors
 
 ### Phase 2 — Large Files + App Uninstaller
-- [ ] Large file finder: walk from `/`, filter by size threshold (default 50 MB)
-- [ ] Sort by size, display path + size, open in Finder action
-- [ ] App uninstaller: list `/Applications/` + `~/Applications/`
-- [ ] Parse `Info.plist` for bundle ID per app
-- [ ] Find leftover files in `~/Library/` matching bundle ID or app name
-- [ ] Move app + leftovers to Trash
-- [ ] Rust unit tests for leftover detection logic
+- [x] Large file finder: configurable root (Home or Full Disk) + size threshold
+- [x] Sort by size, display path + size, Reveal in Finder + Move to Trash actions
+- [x] App uninstaller: list `/Applications/` + `~/Applications/`
+- [x] Parse `Info.plist` for bundle ID, display name, version per app
+- [x] Find leftover files in 7 `~/Library/` locations matching bundle ID or app name
+- [x] Move app + selected leftovers to Trash
+- [x] Rust unit tests: 23 tests passing (skip dirs, file scan, app parsing, safety guards)
+- [x] TypeScript: zero type errors
 
 ### Phase 3 — Startup Items + Duplicate Finder
 - [ ] Startup items: read `~/Library/LaunchAgents/`, `/Library/LaunchAgents/`, `/Library/LaunchDaemons/`
