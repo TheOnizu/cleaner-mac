@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   FileSearch,
   Loader2,
   FolderOpen,
   ExternalLink,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   Card,
@@ -48,11 +50,18 @@ export function LargeFiles() {
   const [minSizeMb, setMinSizeMb] = useState(50);
   const [error, setError] = useState<string | null>(null);
   const [trashing, setTrashing] = useState<string | null>(null);
+  const [scannedCount, setScannedCount] = useState(0);
 
   async function runScan() {
     setScanState("scanning");
     setEntries([]);
+    setScannedCount(0);
     setError(null);
+
+    const unlisten = await listen<{ scanned: number }>("scan-progress", (ev) => {
+      setScannedCount(ev.payload.scanned);
+    });
+
     try {
       const result = await invoke<LargeFileEntry[]>("scan_large_files", {
         root,
@@ -60,10 +69,15 @@ export function LargeFiles() {
       });
       setEntries(result);
     } catch (e) {
-      setError(String(e));
+      if (!String(e).includes("cancelled")) setError(String(e));
     } finally {
+      unlisten();
       setScanState("done");
     }
+  }
+
+  async function cancelScan() {
+    await invoke("cancel_scan").catch(() => {});
   }
 
   async function handleReveal(path: string) {
@@ -141,18 +155,26 @@ export function LargeFiles() {
             </div>
           </div>
 
-          <Button
-            onClick={runScan}
-            disabled={scanState === "scanning"}
-            className="gap-2"
-          >
-            {scanState === "scanning" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <FileSearch className="w-4 h-4" />
+          <div className="flex gap-2">
+            {scanState === "scanning" && (
+              <Button variant="outline" onClick={cancelScan} className="gap-2">
+                <X className="w-4 h-4" />
+                Cancel
+              </Button>
             )}
-            {scanState === "scanning" ? "Scanning…" : "Scan"}
-          </Button>
+            <Button
+              onClick={runScan}
+              disabled={scanState === "scanning"}
+              className="gap-2"
+            >
+              {scanState === "scanning" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileSearch className="w-4 h-4" />
+              )}
+              {scanState === "scanning" ? "Scanning…" : "Scan"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -167,9 +189,14 @@ export function LargeFiles() {
           <CardContent className="py-8 flex flex-col items-center gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Scanning{root ? " full disk" : " home folder"}… this may take a moment
+              Scanning{root ? " full disk" : " home folder"}…
             </p>
             <Progress value={null} className="w-48" />
+            {scannedCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {scannedCount.toLocaleString()} files checked
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

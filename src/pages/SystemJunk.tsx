@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   Trash2,
   ScanSearch,
@@ -8,6 +9,7 @@ import {
   FileText,
   CheckSquare,
   Square,
+  X,
 } from "lucide-react";
 import {
   Card,
@@ -19,11 +21,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/format";
+import { useSessionStats } from "@/contexts/SessionStats";
 
 interface JunkEntry {
   path: string;
   name: string;
   size: number;
+  category: string;
+}
+
+interface ScanProgress {
+  current: number;
+  total: number;
   category: string;
 }
 
@@ -33,9 +42,10 @@ export function SystemJunk() {
   const [state, setState] = useState<ScanState>("idle");
   const [entries, setEntries] = useState<JunkEntry[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { addClean } = useSessionStats();
 
-  // Group entries by category
   const grouped = useMemo(() => {
     const map = new Map<string, JunkEntry[]>();
     for (const entry of entries) {
@@ -55,7 +65,13 @@ export function SystemJunk() {
     setState("scanning");
     setEntries([]);
     setSelected(new Set());
+    setProgress(null);
     setError(null);
+
+    const unlisten = await listen<ScanProgress>("junk-scan-progress", (ev) => {
+      setProgress(ev.payload);
+    });
+
     try {
       const result = await invoke<JunkEntry[]>("scan_system_junk");
       setEntries(result);
@@ -63,17 +79,28 @@ export function SystemJunk() {
     } catch (e) {
       setError(String(e));
       setState("idle");
+    } finally {
+      unlisten();
+      setProgress(null);
     }
+  }
+
+  async function cancelScan() {
+    await invoke("cancel_scan").catch(() => {});
   }
 
   async function deleteSelected() {
     if (selected.size === 0) return;
     setState("deleting");
     setError(null);
+    const toDelete = Array.from(selected);
+    const bytesToFree = entries
+      .filter((e) => selected.has(e.path))
+      .reduce((acc, e) => acc + e.size, 0);
     try {
-      await invoke("delete_files", { paths: Array.from(selected) });
-      // Remove deleted entries and clear selection
+      await invoke("delete_files", { paths: toDelete });
       setEntries((prev) => prev.filter((e) => !selected.has(e.path)));
+      addClean(bytesToFree, toDelete.length);
       setSelected(new Set());
     } catch (e) {
       setError(String(e));
@@ -92,49 +119,42 @@ export function SystemJunk() {
   }
 
   function toggleCategory(category: string) {
-    const categoryPaths =
-      grouped.get(category)?.map((e) => e.path) ?? [];
-    const allSelected = categoryPaths.every((p) => selected.has(p));
+    const paths = grouped.get(category)?.map((e) => e.path) ?? [];
+    const allSelected = paths.every((p) => selected.has(p));
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allSelected) {
-        categoryPaths.forEach((p) => next.delete(p));
-      } else {
-        categoryPaths.forEach((p) => next.add(p));
-      }
+      if (allSelected) paths.forEach((p) => next.delete(p));
+      else paths.forEach((p) => next.add(p));
       return next;
     });
   }
 
-  function selectAll() {
-    setSelected(new Set(entries.map((e) => e.path)));
-  }
-
-  function clearAll() {
-    setSelected(new Set());
-  }
+  const progressPercent = progress
+    ? Math.round((progress.current / progress.total) * 100)
+    : 0;
 
   return (
     <div className="p-6 space-y-6 pb-24">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">System Junk</h1>
-          <p className="text-muted-foreground">
-            Clean caches, logs, and temporary files
-          </p>
+          <p className="text-muted-foreground">Clean caches, logs, and temp files</p>
         </div>
-        <Button
-          onClick={runScan}
-          disabled={state === "scanning" || state === "deleting"}
-          className="gap-2"
-        >
-          {state === "scanning" ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
+        {state === "scanning" ? (
+          <Button variant="outline" onClick={cancelScan} className="gap-2">
+            <X className="w-4 h-4" />
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            onClick={runScan}
+            disabled={state === "deleting"}
+            className="gap-2"
+          >
             <ScanSearch className="w-4 h-4" />
-          )}
-          {state === "scanning" ? "Scanning…" : "Scan for Junk"}
-        </Button>
+            Scan for Junk
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -148,9 +168,14 @@ export function SystemJunk() {
           <CardContent className="py-8 flex flex-col items-center gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Scanning your system…
+              {progress ? `Scanning ${progress.category}…` : "Preparing scan…"}
             </p>
-            <Progress value={null} className="w-48" />
+            <Progress value={progressPercent || null} className="w-64" />
+            {progress && (
+              <p className="text-xs text-muted-foreground">
+                {progress.current} / {progress.total}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -161,8 +186,7 @@ export function SystemJunk() {
             <ScanSearch className="w-10 h-10 text-muted-foreground" />
             <p className="font-medium">Ready to scan</p>
             <p className="text-sm text-muted-foreground max-w-xs">
-              Click "Scan for Junk" to find caches, logs, and other safe-to-remove
-              files on your Mac.
+              Click "Scan for Junk" to find safe-to-remove files on your Mac.
             </p>
           </CardContent>
         </Card>
@@ -173,61 +197,49 @@ export function SystemJunk() {
           <CardContent className="py-12 flex flex-col items-center gap-3 text-center">
             <Trash2 className="w-10 h-10 text-green-500" />
             <p className="font-medium">Your Mac looks clean!</p>
-            <p className="text-sm text-muted-foreground">
-              No junk files found.
-            </p>
           </CardContent>
         </Card>
       )}
 
       {entries.length > 0 && (
         <>
-          {/* Summary bar */}
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span>
-              Found{" "}
-              <strong className="text-foreground">{entries.length} items</strong>{" "}
-              totalling{" "}
+              Found <strong className="text-foreground">{entries.length} items</strong> ·{" "}
               <strong className="text-foreground">{formatBytes(totalSize)}</strong>
             </span>
-            <Button variant="ghost" size="sm" onClick={selectAll}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelected(new Set(entries.map((e) => e.path)))}
+            >
               Select all
             </Button>
-            <Button variant="ghost" size="sm" onClick={clearAll}>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
               Clear
             </Button>
           </div>
 
-          {/* Category groups */}
           <div className="space-y-4">
             {Array.from(grouped.entries()).map(([category, items]) => {
               const catSize = items.reduce((acc, e) => acc + e.size, 0);
-              const allCatSelected = items.every((e) => selected.has(e.path));
+              const allSelected = items.every((e) => selected.has(e.path));
               return (
                 <Card key={category}>
                   <CardHeader className="py-3 px-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => toggleCategory(category)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          {allCatSelected ? (
+                        <button onClick={() => toggleCategory(category)}>
+                          {allSelected ? (
                             <CheckSquare className="w-4 h-4" />
                           ) : (
-                            <Square className="w-4 h-4" />
+                            <Square className="w-4 h-4 text-muted-foreground" />
                           )}
                         </button>
-                        <CardTitle className="text-sm font-semibold">
-                          {category}
-                        </CardTitle>
-                        <Badge variant="secondary" className="text-xs">
-                          {items.length}
-                        </Badge>
+                        <CardTitle className="text-sm font-semibold">{category}</CardTitle>
+                        <Badge variant="secondary" className="text-xs">{items.length}</Badge>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {formatBytes(catSize)}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{formatBytes(catSize)}</span>
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
@@ -250,9 +262,7 @@ export function SystemJunk() {
                           ) : (
                             <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
                           )}
-                          <span className="text-sm truncate flex-1">
-                            {entry.name}
-                          </span>
+                          <span className="text-sm truncate flex-1">{entry.name}</span>
                           <span className="text-xs text-muted-foreground shrink-0">
                             {formatBytes(entry.size)}
                           </span>
@@ -267,7 +277,6 @@ export function SystemJunk() {
         </>
       )}
 
-      {/* Sticky bottom action bar */}
       {selected.size > 0 && (
         <div className="fixed bottom-0 left-64 right-0 bg-background/95 backdrop-blur border-t p-4 flex items-center justify-between">
           <p className="text-sm">

@@ -50,19 +50,22 @@ Inspired by CleanMyMac — personal project, macOS 12+.
 - [x] TypeScript: zero type errors
 
 ### Phase 3 — Startup Items + Duplicate Finder
-- [ ] Startup items: read `~/Library/LaunchAgents/`, `/Library/LaunchAgents/`, `/Library/LaunchDaemons/`
-- [ ] Enable / disable items (write `Disabled` key to plist)
-- [ ] Duplicate finder: user selects a folder, hash files with xxhash, group by hash
-- [ ] Show duplicate groups, keep one, trash the rest
-- [ ] Rust unit tests for hashing + grouping logic
+- [x] Startup items: read `~/Library/LaunchAgents/`, `/Library/LaunchAgents/`, `/Library/LaunchDaemons/`
+- [x] Enable / disable items (write `Disabled` key to plist); system items shown read-only
+- [x] Duplicate finder: native folder picker, two-pass scan (group by size → MD5 hash candidates)
+- [x] Show duplicate groups sorted by wasted space; pre-selects copies, keeps first file
+- [x] Rust unit tests: 35 tests passing (plist parse, toggle guard, hash equality, group logic, sort order)
+- [x] TypeScript: zero type errors
 
 ### Phase 4 — Privacy Cleaner + Polish
-- [ ] Browser cache cleaner: Chrome, Safari, Firefox (known paths)
-- [ ] Recent items cleaner: `~/Library/Application Support/com.apple.sharedfilelist/`
-- [ ] Dashboard summary: total space recovered, items cleaned
-- [ ] Animated progress bars during scans
-- [ ] Scan cancellation support
-- [ ] End-to-end test pass for all features
+- [x] Browser cache cleaner: Chrome, Chrome Canary, Safari, Firefox (all profiles), Edge, Brave, Opera
+- [x] Recent items cleaner: `~/Library/Application Support/com.apple.sharedfilelist/`
+- [x] Dashboard: session stats card (space freed + items cleaned), quick-action grid
+- [x] Progress events on System Junk scanner (per-source) and Large Files scanner (every 500 files)
+- [x] Scan cancellation: `cancel_scan` command + Cancel button on Junk and Large Files pages
+- [x] Session stats context (`SessionStats.tsx`) wired across all cleaning pages
+- [x] Rust refactor: inner functions (`find_large_files`, `find_duplicates`) for testability
+- [x] 41 Rust tests passing · TypeScript: zero errors
 
 ---
 

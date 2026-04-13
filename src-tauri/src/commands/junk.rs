@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use tauri::Emitter;
 use walkdir::WalkDir;
 
 #[derive(Serialize, Clone)]
@@ -67,14 +68,24 @@ pub fn entry_size(path: &Path) -> u64 {
 }
 
 /// List the immediate children of each junk directory, calculate their sizes in parallel.
-/// Only entries with size > 0 are returned.
+/// Emits `junk-scan-progress` events as each source is processed.
 #[tauri::command]
-pub async fn scan_system_junk() -> Result<Vec<JunkEntry>, String> {
-    tokio::task::spawn_blocking(|| {
+pub async fn scan_system_junk(app: tauri::AppHandle) -> Result<Vec<JunkEntry>, String> {
+    tokio::task::spawn_blocking(move || {
         let sources = junk_sources();
+        let total = sources.len();
         let mut all_entries: Vec<JunkEntry> = Vec::new();
 
-        for source in &sources {
+        for (i, source) in sources.iter().enumerate() {
+            let _ = app.emit(
+                "junk-scan-progress",
+                serde_json::json!({
+                    "current": i + 1,
+                    "total": total,
+                    "category": source.category,
+                }),
+            );
+
             if !source.root.exists() {
                 continue;
             }
@@ -87,7 +98,6 @@ pub async fn scan_system_junk() -> Result<Vec<JunkEntry>, String> {
                 .map(|e| e.path())
                 .collect();
 
-            // Calculate sizes in parallel per category
             let entries: Vec<JunkEntry> = children
                 .par_iter()
                 .filter_map(|path| {
@@ -112,13 +122,7 @@ pub async fn scan_system_junk() -> Result<Vec<JunkEntry>, String> {
             all_entries.extend(entries);
         }
 
-        // Sort by size descending within each category
-        all_entries.sort_by(|a, b| {
-            a.category
-                .cmp(&b.category)
-                .then(b.size.cmp(&a.size))
-        });
-
+        all_entries.sort_by(|a, b| a.category.cmp(&b.category).then(b.size.cmp(&a.size)));
         Ok::<Vec<JunkEntry>, String>(all_entries)
     })
     .await
