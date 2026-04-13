@@ -109,11 +109,16 @@ pub fn reveal_in_finder(path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Move a user-selected file to the system Trash.
+/// Permanently delete a user-selected file or directory.
 #[tauri::command]
 pub async fn move_to_trash(path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        trash::delete(&path).map_err(|e| format!("Failed to trash {path}: {e}"))
+        let p = std::path::Path::new(&path);
+        if p.is_dir() {
+            std::fs::remove_dir_all(p).map_err(|e| format!("Failed to delete {path}: {e}"))
+        } else {
+            std::fs::remove_file(p).map_err(|e| format!("Failed to delete {path}: {e}"))
+        }
     })
     .await
     .map_err(|e| e.to_string())?

@@ -142,7 +142,7 @@ fn is_safe_privacy_path(path: &Path) -> bool {
 
 /// Clean selected privacy items.
 /// For directories: deletes the *contents* (not the directory itself).
-/// For files: moves the file to Trash.
+/// For files: permanently deletes the file.
 #[tauri::command]
 pub async fn clean_privacy_items(paths: Vec<String>) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
@@ -157,10 +157,16 @@ pub async fn clean_privacy_items(paths: Vec<String>) -> Result<(), String> {
                     .map_err(|e| e.to_string())?
                     .filter_map(|e| e.ok())
                 {
-                    let _ = trash::delete(child.path()); // best-effort per item
+                    let p = child.path();
+                    if p.is_dir() {
+                        let _ = std::fs::remove_dir_all(&p);
+                    } else {
+                        let _ = std::fs::remove_file(&p);
+                    }
                 }
             } else if path.is_file() {
-                trash::delete(path).map_err(|e| format!("Failed to trash {path_str}: {e}"))?;
+                std::fs::remove_file(path)
+                    .map_err(|e| format!("Failed to delete {path_str}: {e}"))?;
             }
         }
         Ok(())

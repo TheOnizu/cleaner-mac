@@ -176,7 +176,7 @@ fn is_app_bundle(path: &Path) -> bool {
                 .unwrap_or(false))
 }
 
-/// Move the .app bundle and selected leftovers to the system Trash.
+/// Permanently delete the .app bundle and selected leftovers.
 #[tauri::command]
 pub async fn uninstall_app(
     app_path: String,
@@ -187,14 +187,20 @@ pub async fn uninstall_app(
         if !is_app_bundle(app) {
             return Err(format!("Not a valid app bundle path: {app_path}"));
         }
-        trash::delete(app).map_err(|e| format!("Failed to trash app: {e}"))?;
+        std::fs::remove_dir_all(app).map_err(|e| format!("Failed to delete app: {e}"))?;
 
         for path_str in &leftover_paths {
             let path = Path::new(path_str);
             if !is_safe_leftover(path) {
                 return Err(format!("Refusing to delete path outside safe roots: {path_str}"));
             }
-            trash::delete(path).map_err(|e| format!("Failed to trash {path_str}: {e}"))?;
+            if path.is_dir() {
+                std::fs::remove_dir_all(path)
+                    .map_err(|e| format!("Failed to delete {path_str}: {e}"))?;
+            } else {
+                std::fs::remove_file(path)
+                    .map_err(|e| format!("Failed to delete {path_str}: {e}"))?;
+            }
         }
         Ok(())
     })

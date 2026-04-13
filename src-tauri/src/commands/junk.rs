@@ -129,7 +129,7 @@ pub async fn scan_system_junk(app: tauri::AppHandle) -> Result<Vec<JunkEntry>, S
     .map_err(|e| e.to_string())?
 }
 
-/// Move the given file/directory paths to the system Trash.
+/// Permanently delete the given file/directory paths.
 #[tauri::command]
 pub async fn delete_files(paths: Vec<String>) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
@@ -139,7 +139,13 @@ pub async fn delete_files(paths: Vec<String>) -> Result<(), String> {
             if !is_safe_to_delete(path) {
                 return Err(format!("Refusing to delete path outside junk roots: {path_str}"));
             }
-            trash::delete(path).map_err(|e| format!("Failed to trash {path_str}: {e}"))?;
+            if path.is_dir() {
+                std::fs::remove_dir_all(path)
+                    .map_err(|e| format!("Failed to delete {path_str}: {e}"))?;
+            } else {
+                std::fs::remove_file(path)
+                    .map_err(|e| format!("Failed to delete {path_str}: {e}"))?;
+            }
         }
         Ok(())
     })
