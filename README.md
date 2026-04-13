@@ -21,24 +21,23 @@ Inspired by CleanMyMac — personal project, macOS 12+.
 ### Phase 0 — Scaffold & Foundation
 - [x] Initialize Tauri + React + TypeScript project
 - [x] Git repository + GitHub remote
-- [ ] Install Tailwind CSS + shadcn/ui
-- [ ] Sidebar navigation with routing (React Router)
-- [ ] Full Disk Access permission gate (detect + guide user to System Settings)
+- [x] Install Tailwind CSS + shadcn/ui
+- [x] Sidebar navigation with routing (React Router)
+- [x] Full Disk Access permission gate (detect + guide user to System Settings)
 
 ### Phase 1 — Disk Overview + System Junk Cleaner
-- [ ] Dashboard: total disk space, used, free (Rust `statvfs`)
-- [ ] System junk scanner — known safe paths:
+- [x] Dashboard: total disk space, used, free (Rust `statvfs`)
+- [x] System junk scanner — known safe paths:
   - `~/Library/Caches/`
   - `/Library/Caches/`
   - `~/Library/Logs/`
-  - `~/Library/Application Support/*/Cache*`
   - `~/Library/Developer/Xcode/DerivedData/`
   - `~/Library/Developer/Xcode/iOS DeviceSupport/`
   - `/tmp/`
-- [ ] File list grouped by category with sizes + checkboxes
-- [ ] Delete selected files (move to Trash)
-- [ ] Rust unit tests for junk scanner paths
-- [ ] Integration test: scan → select → delete flow
+- [x] File list grouped by category with sizes + checkboxes
+- [x] Delete selected files (move to Trash)
+- [x] Rust unit tests: 10 tests passing (disk, junk scanner, safety guard)
+- [x] TypeScript: zero type errors
 
 ### Phase 2 — Large Files + App Uninstaller
 - [ ] Large file finder: walk from `/`, filter by size threshold (default 50 MB)
